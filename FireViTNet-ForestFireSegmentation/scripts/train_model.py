@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.getcwd())
+
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
