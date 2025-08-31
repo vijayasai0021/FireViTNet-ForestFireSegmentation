@@ -33,7 +33,7 @@ class DiceLoss(nn.Module):
 LEARNING_RATE = 1e-3
 BATCH_SIZE = 2
 EPOCHS = 100
-DATA_DIR = "/content/drive/MyDrive/path/to/your/UAVs-FFDB" # IMPORTANT: Change this path
+DATA_DIR = "/content/Processed_Dataset" # IMPORTANT: Change this path
 MODEL_SAVE_PATH = "./trained_models"
 INPUT_SIZE = (224, 224)
 
