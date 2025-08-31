@@ -13,7 +13,7 @@ class FireDataset(Dataset):
         self.augment = augment
         
         # Get image and mask paths
-        self.image_paths = sorted(list((self.data_dir / 'images').glob('*.jpg')))
+        self.image_paths = sorted(list((self.data_dir / 'images').glob('*.png')))
         self.mask_paths = sorted(list((self.data_dir / 'masks').glob('*.png')))
         
         assert len(self.image_paths) == len(self.mask_paths), "Number of images and masks must match"
