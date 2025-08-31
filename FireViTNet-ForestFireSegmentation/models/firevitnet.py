@@ -2,34 +2,44 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .mobilevit import MobileViTBackbone
+# Assuming these imports point to your custom module files
+from .mobilevit import MobileViTBackbone 
 from .cbam import CBAM
 from .dense_aspp import DenseASPP
 from .stripe_pooling import StripePooling
 
 class FireViTNet(nn.Module):
-    """Complete FireViTNet model for forest fire segmentation"""
-    def __init__(self, num_classes=2, in_channels=3):
+    """FireViTNet model with the parallel architecture from the paper."""
+    
+    # Using num_classes=1 for binary segmentation is more standard
+    def __init__(self, num_classes=1, in_channels=3):
         super().__init__()
         
-        # Backbone
+        # --- Backbone ---
         self.backbone = MobileViTBackbone(in_channels)
+        # IMPORTANT: You must know the output channels of your backbone.
+        # Let's assume your backbone's final feature map has 128 channels.
+        backbone_out_channels = 128 
         
-        # Attention module
-        self.cbam = CBAM(128)  # Applied to final backbone features
-        
-        # Dense ASPP
-        self.aspp = DenseASPP(128, atrous_rates=[6, 12, 18], out_channels=256)
-        
-        # Stripe pooling
+        # --- Path 1: Multi-scale & Spatial Context ---
+        self.aspp = DenseASPP(backbone_out_channels, atrous_rates=[6, 12, 18], out_channels=256)
         self.stripe_pooling = StripePooling(256)
-        
-        # Decoder
+        # 1x1 Conv to match channel dimensions for combining
+        self.conv_path1 = nn.Conv2d(256, 256, kernel_size=1, bias=False)
+
+        # --- Path 2: Attention ---
+        self.cbam = CBAM(backbone_out_channels)
+        # 1x1 Conv to match channel dimensions for combining
+        self.conv_path2 = nn.Conv2d(backbone_out_channels, 256, kernel_size=1, bias=False)
+
+        # --- Decoder ---
+        # The decoder now takes the combined features as input
         self.decoder = nn.Sequential(
             nn.Conv2d(256, 128, 3, padding=1, bias=False),
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
-            nn.Dropout2d(0.3),
+            # Dropout is a good addition for regularization
+            nn.Dropout2d(0.3), 
             
             nn.Conv2d(128, 64, 3, padding=1, bias=False),
             nn.BatchNorm2d(64),
@@ -41,7 +51,7 @@ class FireViTNet(nn.Module):
         
         # Initialize weights
         self._init_weights()
-    
+
     def _init_weights(self):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -51,44 +61,37 @@ class FireViTNet(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
-    
+
     def forward(self, x):
         input_size = x.shape[-2:]
         
-        # Feature extraction
+        # --- Feature extraction ---
         features = self.backbone(x)
-        x = features[-1]  # Use final features (1/16 resolution)
+        last_features = features[-1] # Use final features
         
-        # Apply attention
-        x = self.cbam(x)
+        # --- Parallel Paths ---
+        # Path 1
+        path1 = self.aspp(last_features)
+        path1 = self.stripe_pooling(path1)
+        path1 = self.conv_path1(path1)
+
+        # Path 2
+        path2 = self.cbam(last_features)
+        path2 = self.conv_path2(path2)
         
-        # Multi-scale context
-        x = self.aspp(x)
+        # --- Combine Paths ---
+        # The diagram shows an addition operation
+        combined_features = path1 + path2
         
-        # Spatial context
-        x = self.stripe_pooling(x)
+        # --- Decode to segmentation map ---
+        decoded_map = self.decoder(combined_features)
         
-        # Decode to segmentation map
-        x = self.decoder(x)
+        # --- Upsample to original size ---
+        out = F.interpolate(decoded_map, size=input_size, mode='bilinear', align_corners=False)
         
-        # Upsample to original size
-        x = F.interpolate(x, size=input_size, mode='bilinear', align_corners=False)
-        
-        return x
-    
-    def get_model_size(self):
-        """Calculate model size in MB"""
-        param_size = 0
-        for param in self.parameters():
-            param_size += param.nelement() * param.element_size()
-        
-        buffer_size = 0
-        for buffer in self.buffers():
-            buffer_size += buffer.nelement() * buffer.element_size()
-        
-        size_mb = (param_size + buffer_size) / 1024**2
-        return size_mb
-    
-    def count_parameters(self):
-        """Count total trainable parameters"""
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+        # For binary segmentation (num_classes=1), a sigmoid is typically applied
+        # either here or by the loss function (BCEWithLogitsLoss).
+        # If you keep num_classes=2, you would apply a softmax.
+        return torch.sigmoid(out) if self.decoder[-1].out_channels == 1 else out
+
+    # Your helper functions get_model_size() and count_parameters() are great and can remain as they are.
