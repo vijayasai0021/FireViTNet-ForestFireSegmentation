@@ -26,6 +26,11 @@ class FireDataset(Dataset):
                 A.VerticalFlip(p=0.3),
                 A.RandomRotate90(p=0.5),
                 A.RandomBrightnessContrast(p=0.3, brightness_limit=0.2, contrast_limit=0.2),
+                
+                # --- THIS IS THE NEW LINE YOU SHOULD ADD ---
+                # This adds a 50x50 white patch to 20% of the images, as per the paper 
+                A.CoarseDropout(max_holes=1, max_height=50, max_width=50, min_holes=1, min_height=50, min_width=50, fill_value=255, p=0.2),
+                
                 A.GaussNoise(p=0.2),
                 A.Blur(p=0.2),
                 A.RandomGamma(p=0.2),
@@ -57,8 +62,8 @@ class FireDataset(Dataset):
         image = transformed['image']
         mask = transformed['mask']
         
-        # Convert mask to float and normalize to [0, 1]
-        mask = mask.float() / 255.0
-        mask = mask.unsqueeze(0)  # Add channel dimension
+        # Ensure mask is binary (0 or 1) and has a channel dimension
+        mask = (mask > 0).float() # This makes it more robust by thresholding
+        mask = mask.unsqueeze(0)
         
         return image, mask
