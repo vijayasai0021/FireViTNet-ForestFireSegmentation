@@ -1,3 +1,5 @@
+# In utils/dataset.py
+
 import torch
 from torch.utils.data import Dataset
 import cv2
@@ -9,16 +11,9 @@ from albumentations.pytorch import ToTensorV2
 class FireDataset(Dataset):
     def __init__(self, data_dir, input_size=(224, 224), augment=False):
         self.data_dir = Path(data_dir)
-        self.input_size = input_size
-        self.augment = augment
+        # ... (the rest of the __init__ method is the same)
         
-        # Get image and mask paths
-        self.image_paths = sorted(list((self.data_dir / 'images').glob('*.png')))
-        self.mask_paths = sorted(list((self.data_dir / 'masks').glob('*.png')))
-        
-        assert len(self.image_paths) == len(self.mask_paths), "Number of images and masks must match"
-        
-        # Define transforms
+        # --- THIS IS THE UPDATED AUGMENTATION PART ---
         if augment:
             self.transform = A.Compose([
                 A.Resize(*input_size),
@@ -27,9 +22,8 @@ class FireDataset(Dataset):
                 A.RandomRotate90(p=0.5),
                 A.RandomBrightnessContrast(p=0.3, brightness_limit=0.2, contrast_limit=0.2),
                 
-                # --- THIS IS THE NEW LINE YOU SHOULD ADD ---
-                # This adds a 50x50 white patch to 20% of the images, as per the paper 
-                A.CoarseDropout(max_holes=1, max_height=50, max_width=50, min_holes=1, min_height=50, min_width=50, fill_value=255, p=0.2),
+                # Use A.Cutout instead of A.CoarseDropout with updated arguments
+                A.Cutout(num_holes=1, max_h_size=50, max_w_size=50, fill_value=255, p=0.2),
                 
                 A.GaussNoise(p=0.2),
                 A.Blur(p=0.2),
