@@ -2,84 +2,80 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class ASPPConv(nn.Sequential):
-    """ASPP convolution with atrous convolution"""
-    def __init__(self, in_channels, out_channels, dilation):
-        modules = [
-            nn.Conv2d(in_channels, out_channels, 3, padding=dilation, dilation=dilation, bias=False),
+class _DenseASPPConv(nn.Sequential):
+    def __init__(self, in_channels, inter_channels, out_channels, atrous_rate, drop_rate=0.1):
+        super(_DenseASPPConv, self).__init__()
+        self.add_module(
+            "conv1",
+            nn.Conv2d(in_channels, inter_channels, kernel_size=1, bias=False),
+        ),
+        self.add_module(
+            "bn1",
+            nn.BatchNorm2d(inter_channels),
+        ),
+        self.add_module(
+            "relu1",
+            nn.ReLU(inplace=True),
+        ),
+        self.add_module(
+            "conv2",
+            nn.Conv2d(inter_channels, out_channels, kernel_size=3, dilation=atrous_rate, padding=atrous_rate, bias=False),
+        ),
+        self.add_module(
+            "bn2",
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        ]
-        super().__init__(*modules)
-
-class ASPPPooling(nn.Sequential):
-    """ASPP pooling layer"""
-    def __init__(self, in_channels, out_channels):
-        super().__init__(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_channels, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
+        ),
+        self.add_module(
+            "relu2",
+            nn.ReLU(inplace=True),
         )
-    
+        self.drop_rate = drop_rate
+
     def forward(self, x):
-        size = x.shape[-2:]
-        for mod in self:
-            x = mod(x)
-        return F.interpolate(x, size=size, mode='bilinear', align_corners=False)
+        features = super(_DenseASPPConv, self).forward(x)
+        if self.drop_rate > 0:
+            features = F.dropout(features, p=self.drop_rate, training=self.training)
+        return features
 
 class DenseASPP(nn.Module):
-    """Dense Atrous Spatial Pyramid Pooling"""
-    def __init__(self, in_channels, atrous_rates=[6, 12, 18], out_channels=256):
-        super().__init__()
+    """
+    Implementation of the Dense Atrous Spatial Pyramid Pooling module.
+    """
+    def __init__(self, in_channels, inter_channels=256, out_channels=256):
+        super(DenseASPP, self).__init__()
         
-        modules = []
-        
-        # 1x1 conv
-        modules.append(nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(inplace=True)
-        ))
-        
-        # Atrous convolutions with dense connections
-        prev_channels = in_channels
-        for i, rate in enumerate(atrous_rates):
-            modules.append(ASPPConv(prev_channels, out_channels, rate))
-            prev_channels += out_channels  # Dense connection
-        
-        # Global average pooling
-        modules.append(ASPPPooling(in_channels, out_channels))
-        
-        self.convs = nn.ModuleList(modules)
-        
-        # Final projection
-        total_channels = out_channels * (len(atrous_rates) + 2)  # +2 for 1x1 and pooling
+        # The paper's diagram shows 5 dilated convolutions plus a pooling layer.
+        # Let's use the dilation rates mentioned in similar architectures.
+        atrous_rates = [3, 6, 12, 18, 24]
+
+        # Each new convolution takes the original input + all previous outputs
+        self.aspp_conv1 = _DenseASPPConv(in_channels, inter_channels, out_channels, atrous_rates[0])
+        self.aspp_conv2 = _DenseASPPConv(in_channels + out_channels * 1, inter_channels, out_channels, atrous_rates[1])
+        self.aspp_conv3 = _DenseASPPConv(in_channels + out_channels * 2, inter_channels, out_channels, atrous_rates[2])
+        self.aspp_conv4 = _DenseASPPConv(in_channels + out_channels * 3, inter_channels, out_channels, atrous_rates[3])
+        self.aspp_conv5 = _DenseASPPConv(in_channels + out_channels * 4, inter_channels, out_channels, atrous_rates[4])
+
+        # Final convolution layer to combine all the feature maps
         self.project = nn.Sequential(
-            nn.Conv2d(total_channels, out_channels, 1, bias=False),
+            nn.Conv2d(in_channels + 5 * out_channels, out_channels, 1, bias=False),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
-            nn.Dropout2d(0.5)
+            nn.Dropout(0.1),
         )
-        
+
     def forward(self, x):
-        results = []
+        aspp1 = self.aspp_conv1(x)
+        x2 = torch.cat([aspp1, x], dim=1)
+
+        aspp2 = self.aspp_conv2(x2)
+        x3 = torch.cat([aspp2, x2], dim=1)
+
+        aspp3 = self.aspp_conv3(x3)
+        x4 = torch.cat([aspp3, x3], dim=1)
         
-        # 1x1 conv
-        results.append(self.convs[0](x))
+        aspp4 = self.aspp_conv4(x4)
+        x5 = torch.cat([aspp4, x4], dim=1)
         
-        # Dense atrous convolutions
-        input_feat = x
-        for i in range(1, len(self.convs) - 1):
-            feat = self.convs[i](input_feat)
-            results.append(feat)
-            input_feat = torch.cat([input_feat, feat], dim=1)
-        
-        # Global pooling
-        results.append(self.convs[-1](x))
-        
-        # Concatenate all features
-        out = torch.cat(results, dim=1)
-        
-        # Final projection
-        return self.project(out)
+        aspp5 = self.aspp_conv5(x5)
+
+        return self.project(torch.cat([aspp1, aspp2, aspp3, aspp4, aspp5, x], dim=1))
