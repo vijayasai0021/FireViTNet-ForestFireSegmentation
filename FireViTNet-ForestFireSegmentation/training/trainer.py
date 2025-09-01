@@ -30,7 +30,7 @@ class DiceLoss(nn.Module):
 
 # --- 3. Hyperparameters and Setup ---
 # [cite_start]These are based on the paper's experimental setup [cite: 359]
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 1e-4
 BATCH_SIZE = 2
 EPOCHS = 100
 DATA_DIR = "/content/Processed_Dataset" # IMPORTANT: Change this path
