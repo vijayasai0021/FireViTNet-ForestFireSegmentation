@@ -74,7 +74,7 @@ class FireViTNet(nn.Module):
         out = F.interpolate(out, size=self.input_size, mode='bilinear', align_corners=True)
         
         # Apply sigmoid to get a probability map (0 to 1) for the mask
-        return torch.sigmoid(out)
+        return out
 
 # This block allows you to run this file directly to test the model's structure
 if __name__ == '__main__':
