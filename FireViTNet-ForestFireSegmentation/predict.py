@@ -11,7 +11,7 @@ from models.firevitnet import FireViTNet
 # --- 2. Configuration ---
 # Update these paths
 MODEL_PATH = "./trained_models/best_firevitnet_model.pth"
-IMAGE_PATH = "./path/to/your/test_image.jpg"  # <-- IMPORTANT: Change this to your image
+IMAGE_PATH = "./content/forest-fire-fire-smoke-conservation-51951_example.jpeg"  # <-- IMPORTANT: Change this to your image
 INPUT_SIZE = (224, 224)
 
 def predict_single_image(model, image_path, device):
