@@ -80,13 +80,20 @@ if __name__ == '__main__':
         exit()
 
     # --- Visualize the Results ---
-    # Create an overlay of the mask on the original image
     overlay_image = original_image.copy()
-    # Convert mask to the right format to find contours
-    binary_mask = (predicted_mask * 255).astype(np.uint8)
-    contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    # Draw contours on the overlay image in a bright color (e.g., green)
-    cv2.drawContours(overlay_image, contours, -1, (0, 255, 0), 2) # Draw in green with thickness 2
+    
+    # --- THIS IS THE FIX ---
+    # Convert the boolean (True/False) mask to a uint8 (0/255) image before resizing
+    uint8_predicted_mask = (predicted_mask * 255).astype(np.uint8)
+
+    # Now, resize the uint8 version of the mask
+    resized_mask = cv2.resize(uint8_predicted_mask, (original_image.shape[1], original_image.shape[0]))
+    
+    # Find contours on the correctly sized mask
+    contours, _ = cv2.findContours(resized_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Draw contours on the overlay image
+    cv2.drawContours(overlay_image, contours, -1, (0, 255, 0), 3) # Made the line thicker
 
     # Display the three images
     plt.figure(figsize=(18, 6))
@@ -95,15 +102,15 @@ if __name__ == '__main__':
     plt.imshow(original_image)
     plt.title("Original Image")
     plt.axis('off')
-    
+
     plt.subplot(1, 3, 2)
-    plt.imshow(predicted_mask, cmap='gray')
-    plt.title("Predicted Mask")
+    plt.imshow(predicted_mask, cmap='gray') # Display the small original prediction
+    plt.title("Predicted Mask (224x224)")
     plt.axis('off')
 
     plt.subplot(1, 3, 3)
     plt.imshow(overlay_image)
-    plt.title("Prediction Overlay")
+    plt.title("Prediction Overlay (Corrected)")
     plt.axis('off')
     
     plt.tight_layout()
