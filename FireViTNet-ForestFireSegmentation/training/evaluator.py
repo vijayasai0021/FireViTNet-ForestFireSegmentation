@@ -69,7 +69,7 @@ def evaluate_model():
     # --- 6. Visualize Some Predictions ---
     visualize_predictions(model, test_dataset, device)
 
-def visualize_predictions(model, dataset, device, num_samples=5):
+def visualize_predictions(model, dataset, device, num_samples=15):
     plt.figure(figsize=(15, 5 * num_samples))
     for i in range(num_samples):
         idx = np.random.randint(0, len(dataset))
