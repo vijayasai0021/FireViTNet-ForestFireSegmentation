@@ -34,7 +34,7 @@ LEARNING_RATE = 1e-4
 BATCH_SIZE = 2
 EPOCHS = 100
 DATA_DIR = "/content/Processed_Dataset" # IMPORTANT: Change this path
-MODEL_SAVE_PATH = "./trained_models"
+MODEL_SAVE_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels"
 INPUT_SIZE = (224, 224)
 
 def train_model():
