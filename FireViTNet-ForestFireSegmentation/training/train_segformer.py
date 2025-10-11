@@ -14,7 +14,7 @@ import sys
 # --- IMPORTANT: UPDATE THIS PATH ---
 # This must be the path to your main project folder in Google Drive
 sys.path.append('/content/FireViTNet-ForestFireSegmentation/FireViTNet-ForestFireSegmentation') 
-from utils.dataset import FireDataset
+from utils.segformer_dataset import FireDataset
 
 # --- Configuration ---
 DATA_DIR = "/content/Processed_Dataset"
@@ -27,7 +27,7 @@ MODEL_SAVE_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels"
 def train_segformer():
     # --- Load Dataset ---
     # We use augment=True to make the training more robust
-    full_dataset = FireDataset(data_dir=DATA_DIR, input_size=(224, 224), augment=True)
+   full_dataset = SegFormerFireDataset(data_dir=DATA_DIR, input_size=(224, 224), augment=True)
     
     # Split into 80% train, 20% validation
     train_size = int(0.8 * len(full_dataset))
