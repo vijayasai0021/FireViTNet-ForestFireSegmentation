@@ -31,7 +31,7 @@ class DiceLoss(torch.nn.Module):
 
     def forward(self, logits, targets):
         probs = torch.sigmoid(logits)
-        probs = probs.view(-f1)
+        probs = probs.view(-1)
         targets = targets.view(-1)
         intersection = (probs * targets).sum()
         dice_score = (2. * intersection + self.smooth) / (probs.sum() + targets.sum() + self.smooth)
