@@ -14,7 +14,7 @@ import sys
 # --- IMPORTANT: UPDATE THIS PATH ---
 # This must be the path to your main project folder in Google Drive
 sys.path.append('/content/FireViTNet-ForestFireSegmentation/FireViTNet-ForestFireSegmentation') 
-from utils.segformer_dataset import FireDataset
+from utils.segformer_dataset import SegFormerFireDataset
 
 # --- Configuration ---
 DATA_DIR = "/content/Processed_Dataset"
