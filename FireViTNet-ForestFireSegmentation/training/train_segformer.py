@@ -96,7 +96,7 @@ def train_segformer():
 
     # --- Start Training ---
     print("\n--- Starting SegFormer Fine-Tuning with Dice Loss ---")
-    trainer.train()
+    trainer.train(resume_from_checkpoint=True)
     trainer.save_model(MODEL_SAVE_PATH)
     print("--- SegFormer Training Complete ---")
 
