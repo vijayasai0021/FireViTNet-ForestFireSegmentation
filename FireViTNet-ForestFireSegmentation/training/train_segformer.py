@@ -78,7 +78,7 @@ def train_segformer():
         per_device_train_batch_size=4,
         per_device_eval_batch_size=4,
         save_total_limit=2,
-        evaluation_strategy="steps", # Note: use "eval_strategy" for older library versions
+        eval_strategy="steps", # Note: use "eval_strategy" for older library versions
         eval_steps=200,
         save_steps=200,
         logging_steps=50,
