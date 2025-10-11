@@ -1,6 +1,6 @@
 # In training/train_segformer.py
 
-# Step 1: Install necessary libraries (this line will be run by the script)
+import matplotlib.pyplot as plt
 import os
 os.system("pip install transformers accelerate evaluate -q")
 
@@ -62,6 +62,22 @@ def train_segformer():
     val_size = len(full_dataset) - train_size
     train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
     
+    # --- Data Sanity Check ---
+    print("--- Performing a quick data sanity check ---")
+    sample = train_dataset[0]
+    image = sample['pixel_values'].permute(1, 2, 0).numpy()
+    mask = sample['labels'].numpy()
+    
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    image = std * image + mean
+    image = np.clip(image, 0, 1)
+
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1); plt.imshow(image); plt.title("Sample Image (Augmented)"); plt.axis('off')
+    plt.subplot(1, 2, 2); plt.imshow(mask, cmap='gray'); plt.title("Sample Mask"); plt.axis('off')
+    plt.show()
+    
     print(f"Training set size: {len(train_dataset)}")
     print(f"Validation set size: {len(val_dataset)}")
 
@@ -73,12 +89,12 @@ def train_segformer():
     # --- Training Configuration ---
     training_args = TrainingArguments(
         output_dir=MODEL_SAVE_PATH,
-        learning_rate=6e-5,
-        num_train_epochs=50, # Increased to 50 for better results
+        learning_rate=1e-5,  # Lower learning rate for stability
+        num_train_epochs=50,
         per_device_train_batch_size=4,
         per_device_eval_batch_size=4,
         save_total_limit=2,
-        eval_strategy="steps", # Note: use "eval_strategy" for older library versions
+        eval_strategy="steps",
         eval_steps=200,
         save_steps=200,
         logging_steps=50,
@@ -86,7 +102,7 @@ def train_segformer():
         metric_for_best_model="eval_loss",
     )
 
-    # Use our CustomTrainer instead of the default one
+    # Use our CustomTrainer
     trainer = CustomTrainer(
         model=model,
         args=training_args,
@@ -95,8 +111,8 @@ def train_segformer():
     )
 
     # --- Start Training ---
-    print("\n--- Starting SegFormer Fine-Tuning with Dice Loss ---")
-    trainer.train(resume_from_checkpoint=True)
+    print("\n--- Starting NEW SegFormer Fine-Tuning with Dice Loss ---")
+    trainer.train() # <-- Corrected: No resume_from_checkpoint
     trainer.save_model(MODEL_SAVE_PATH)
     print("--- SegFormer Training Complete ---")
 
