@@ -13,7 +13,7 @@ import numpy as np
 import sys
 # --- IMPORTANT: UPDATE THIS PATH ---
 # This must be the path to your main project folder in Google Drive
-sys.path.append('/content/drive/MyDrive/path/to/your/FireViTNet-ForestFireSegmentation') 
+sys.path.append('/content/FireViTNet-ForestFireSegmentation/FireViTNet-ForestFireSegmentation') 
 from utils.dataset import FireDataset
 
 # --- Configuration ---
