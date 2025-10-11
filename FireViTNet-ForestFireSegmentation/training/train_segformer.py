@@ -18,15 +18,43 @@ from utils.segformer_dataset import SegFormerFireDataset
 
 # --- Configuration ---
 DATA_DIR = "/content/Processed_Dataset"
-# We use a SegFormer model pre-trained on a large segmentation dataset (ADE20K)
 MODEL_CHECKPOINT = "nvidia/segformer-b0-finetuned-ade-512-512" 
 # --- IMPORTANT: UPDATE THIS PATH ---
 # This is where your new, trained SegFormer model will be saved permanently
 MODEL_SAVE_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels"
 
+# --- Custom Dice Loss and Trainer ---
+class DiceLoss(torch.nn.Module):
+    def __init__(self, smooth=1.0):
+        super(DiceLoss, self).__init__()
+        self.smooth = smooth
+
+    def forward(self, logits, targets):
+        probs = torch.sigmoid(logits)
+        probs = probs.view(-f1)
+        targets = targets.view(-1)
+        intersection = (probs * targets).sum()
+        dice_score = (2. * intersection + self.smooth) / (probs.sum() + targets.sum() + self.smooth)
+        return 1 - dice_score
+
+class CustomTrainer(Trainer):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.loss_fct = DiceLoss()
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        logits = outputs.get("logits")
+
+        upsampled_logits = torch.nn.functional.interpolate(
+            logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+        )
+        loss = self.loss_fct(upsampled_logits, labels)
+        return (loss, outputs) if return_outputs else loss
+
 def train_segformer():
     # --- Load Dataset ---
-    # We use augment=True to make the training more robust
     full_dataset = SegFormerFireDataset(data_dir=DATA_DIR, input_size=(224, 224), augment=True)
     
     # Split into 80% train, 20% validation
@@ -39,30 +67,27 @@ def train_segformer():
 
     # --- Load Pre-trained SegFormer Model ---
     model = SegformerForSemanticSegmentation.from_pretrained(
-        MODEL_CHECKPOINT,
-        num_labels=1, # We only have one class: "fire"
-        ignore_mismatched_sizes=True # This is required to fine-tune on a new dataset
+        MODEL_CHECKPOINT, num_labels=1, ignore_mismatched_sizes=True
     )
 
     # --- Training Configuration ---
-    # These settings control the training process
     training_args = TrainingArguments(
         output_dir=MODEL_SAVE_PATH,
-        learning_rate=6e-5, # A good starting learning rate for SegFormer
-        num_train_epochs=25, # 25 epochs is enough to get a strong result for your review
-        per_device_train_batch_size=4, # Increase if you have enough GPU memory
+        learning_rate=6e-5,
+        num_train_epochs=50, # Increased to 50 for better results
+        per_device_train_batch_size=4,
         per_device_eval_batch_size=4,
         save_total_limit=2,
-        eval_strategy="steps", # Evaluate during training
-        eval_steps=200, # Evaluate every 200 steps
+        evaluation_strategy="steps", # Note: use "eval_strategy" for older library versions
+        eval_steps=200,
         save_steps=200,
         logging_steps=50,
-        load_best_model_at_end=True, # The Trainer will keep the best model
+        load_best_model_at_end=True,
         metric_for_best_model="eval_loss",
     )
 
-    # The Hugging Face Trainer handles the entire training loop for us
-    trainer = Trainer(
+    # Use our CustomTrainer instead of the default one
+    trainer = CustomTrainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset,
@@ -70,9 +95,9 @@ def train_segformer():
     )
 
     # --- Start Training ---
-    print("\n--- Starting SegFormer Fine-Tuning ---")
+    print("\n--- Starting SegFormer Fine-Tuning with Dice Loss ---")
     trainer.train()
-    trainer.save_model(MODEL_SAVE_PATH) # Save the final best model
+    trainer.save_model(MODEL_SAVE_PATH)
     print("--- SegFormer Training Complete ---")
 
 if __name__ == '__main__':
