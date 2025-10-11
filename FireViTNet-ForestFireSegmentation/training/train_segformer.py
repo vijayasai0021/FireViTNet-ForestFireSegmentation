@@ -42,7 +42,7 @@ class CustomTrainer(Trainer):
         super().__init__(*args, **kwargs)
         self.loss_fct = DiceLoss()
 
-    def compute_loss(self, model, inputs, return_outputs=False **kwargs):
+    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs.pop("labels")
         outputs = model(**inputs)
         logits = outputs.get("logits")
