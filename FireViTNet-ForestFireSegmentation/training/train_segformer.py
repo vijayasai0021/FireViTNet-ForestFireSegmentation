@@ -53,7 +53,7 @@ def train_segformer():
         per_device_train_batch_size=4, # Increase if you have enough GPU memory
         per_device_eval_batch_size=4,
         save_total_limit=2,
-        evaluation_strategy="steps", # Evaluate during training
+        eval_strategy="steps", # Evaluate during training
         eval_steps=200, # Evaluate every 200 steps
         save_steps=200,
         logging_steps=50,
