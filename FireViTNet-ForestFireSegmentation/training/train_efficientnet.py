@@ -7,7 +7,8 @@ from torch.utils.data import DataLoader, random_split
 import numpy as np
 import os
 import timm # We use timm to get EfficientNet
-
+# Add this import near the top
+import segmentation_models_pytorch as smp
 # This is crucial for importing your custom dataset from the utils folder
 import sys
 # --- IMPORTANT: UPDATE THIS PATH ---
@@ -59,14 +60,15 @@ def train_model():
     # --- Load EfficientNet Model ---
     # This is the key change: we load 'efficientnet_b4'
     # num_classes=1 for binary segmentation (fire/no-fire)
-    model = timm.create_model(
-        'efficientnet_b4', 
-        pretrained=True, 
-        in_chans=3, 
-        num_classes=1
+    # Inside train_model(), replace the timm line with this:
+    model = smp.Unet(
+        encoder_name="efficientnet-b4",  # Use EfficientNet-B4 as the backbone
+        encoder_weights="imagenet",       # Load pretrained weights
+        in_channels=3,                    # Input is RGB image
+        classes=1,                        # Output is 1 channel (fire/no-fire mask)
     ).to(device)
     
-    print("EfficientNet-B4 model loaded successfully.")
+    print("Unet with EfficientNet-B4 backbone loaded successfully.")
 
     # --- Setup Loss and Optimizer ---
     loss_fn = DiceLoss()
