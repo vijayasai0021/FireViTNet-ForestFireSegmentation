@@ -9,7 +9,7 @@ import segmentation_models_pytorch as smp # Import the smp library
 import sys
 # --- IMPORTANT: UPDATE THIS PATH ---
 # Path to your main project folder
-sys.path.append('/content/drive/MyDrive/path/to/your/FireViTNet-ForestFireSegmentation')
+sys.path.append('/content/FireViTNet-ForestFireSegmentation/FireViTNet-ForestFireSegmentation')
 from utils.dataset import FireDataset # Use the original dataset
 
 # --- Configuration ---
