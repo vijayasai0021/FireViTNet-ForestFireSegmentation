@@ -5,36 +5,50 @@ from torch.optim import Adam
 import os
 
 # --- 1. Import your custom classes ---
+import sys
+# --- IMPORTANT: UPDATE THIS PATH ---
+sys.path.append('/content/FireViTNet-ForestFireSegmentation/FireViTNet-ForestFireSegmentation')
 from models.firevitnet import FireViTNet
 from utils.dataset import FireDataset
 
-# --- 2. Dice Loss Implementation (as per the paper) ---
-# The paper uses Dice Loss, which is great for segmentation tasks.
+# --- 2. Loss Implementations ---
 class DiceLoss(nn.Module):
     def __init__(self, smooth=1.0):
         super(DiceLoss, self).__init__()
         self.smooth = smooth
 
     def forward(self, logits, targets):
-        # Apply sigmoid to logits to get probabilities
         probs = torch.sigmoid(logits)
-        
-        # Flatten label and prediction tensors
         probs = probs.view(-1)
         targets = targets.view(-1)
-        
         intersection = (probs * targets).sum()
         dice = (2. * intersection + self.smooth) / (probs.sum() + targets.sum() + self.smooth)
-        
         return 1 - dice
 
+# --- THIS IS THE NEW COMBINED LOSS ---
+class CombinedLoss(nn.Module):
+    def __init__(self, smooth=1.0, bce_weight=0.5):
+        super(CombinedLoss, self).__init__()
+        self.dice_loss = DiceLoss(smooth=smooth)
+        self.bce_loss = nn.BCEWithLogitsLoss() # This loss is more stable
+        self.bce_weight = bce_weight
+
+    def forward(self, logits, targets):
+        # Calculate BCE loss
+        bce = self.bce_loss(logits, targets)
+        # Calculate Dice loss
+        dice = self.dice_loss(logits, targets)
+        # Combine them
+        return (self.bce_weight * bce) + ((1 - self.bce_weight) * dice)
+# -------------------------------------
+
 # --- 3. Hyperparameters and Setup ---
-# [cite_start]These are based on the paper's experimental setup [cite: 359]
 LEARNING_RATE = 1e-4
 BATCH_SIZE = 2
 EPOCHS = 100
 DATA_DIR = "/content/Processed_Dataset" # IMPORTANT: Change this path
-MODEL_SAVE_PATH = "./trained_models"
+# --- IMPORTANT: UPDATE THIS PATH ---
+MODEL_SAVE_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels"
 INPUT_SIZE = (224, 224)
 
 def train_model():
@@ -64,10 +78,9 @@ def train_model():
     # --- 5. Initialize Model, Loss, and Optimizer ---
     model = FireViTNet(num_classes=1).to(device)
     
-    # [cite_start]The paper uses Dice Loss [cite: 346]
-    criterion = DiceLoss() 
+    # --- THIS IS THE KEY CHANGE ---
+    criterion = CombinedLoss().to(device) 
     
-    # [cite_start]The paper uses the Adam optimizer [cite: 359]
     optimizer = Adam(model.parameters(), lr=LEARNING_RATE)
 
     # --- 6. Training and Validation Loop ---
@@ -81,16 +94,9 @@ def train_model():
             images = images.to(device)
             masks = masks.to(device)
             
-            # Zero the gradients
             optimizer.zero_grad()
-            
-            # Forward pass
             outputs = model(images)
-            
-            # Calculate loss
             loss = criterion(outputs, masks)
-            
-            # Backward pass and optimization
             loss.backward()
             optimizer.step()
             
@@ -118,8 +124,10 @@ def train_model():
         # Save the model if validation loss has decreased
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), os.path.join(MODEL_SAVE_PATH, 'best_firevitnet_model.pth'))
-            print(f"Model saved to {MODEL_SAVE_PATH}/best_firevitnet_model.pth")
+            # Make sure to save to the correct full path
+            save_path = os.path.join(MODEL_SAVE_PATH, 'best_firevitnet_model.pth')
+            torch.save(model.state_dict(), save_path)
+            print(f"Model saved to {save_path}")
 
     print("Training finished!")
 
