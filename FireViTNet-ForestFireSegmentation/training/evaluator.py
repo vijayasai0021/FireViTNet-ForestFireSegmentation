@@ -1,3 +1,5 @@
+# In training/evaluator.py
+
 import torch
 from torch.utils.data import DataLoader, random_split
 import numpy as np
@@ -5,13 +7,17 @@ import matplotlib.pyplot as plt
 import cv2
 
 # --- 1. Import your custom classes ---
+import sys
+# --- IMPORTANT: UPDATE THIS PATH ---
+sys.path.append('/content/FireViTNet-ForestFireSegmentation/FireViTNet-ForestFireSegmentation') 
 from models.firevitnet import FireViTNet
 from utils.dataset import FireDataset
 
 # --- 2. Configuration ---
 DATA_DIR = "/content/Processed_Dataset"
-MODEL_PATH = "./trained_models/best_firevitnet_model.pth"
-BATCH_SIZE = 4 # We can use a slightly larger batch size for evaluation
+# --- IMPORTANT: UPDATE THIS PATH ---
+MODEL_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels"
+BATCH_SIZE = 4 
 INPUT_SIZE = (224, 224)
 
 def evaluate_model():
@@ -20,8 +26,8 @@ def evaluate_model():
     print(f"Using device: {device}")
 
     # --- 3. Load the Test Dataset ---
-    # We need to create the same train/val/test split as in training to get the test set
     full_dataset = FireDataset(data_dir=DATA_DIR, input_size=INPUT_SIZE, augment=False)
+    # Re-create the same 80/10/10 split to get the test set
     train_size = int(0.8 * len(full_dataset))
     val_size = int(0.1 * len(full_dataset))
     test_size = len(full_dataset) - train_size - val_size
@@ -33,7 +39,7 @@ def evaluate_model():
     # --- 4. Load the Trained Model ---
     model = FireViTNet(num_classes=1).to(device)
     model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
-    model.eval() # Set the model to evaluation mode (very important!)
+    model.eval() # Set the model to evaluation mode
 
     # --- 5. Calculate Metrics ---
     total_tp, total_fp, total_fn = 0, 0, 0
@@ -43,11 +49,14 @@ def evaluate_model():
             images = images.to(device)
             masks = masks.to(device)
             
-            # Get model predictions
+            # Get model predictions (logits)
             outputs = model(images)
             
-            # Convert predictions to a binary mask (0 or 1)
-            preds = (outputs > 0.5).float()
+            # --- THIS IS THE FIX ---
+            # Convert logits to probabilities (0-1) using sigmoid
+            probs = torch.sigmoid(outputs)
+            # Convert probabilities to a binary mask (0 or 1)
+            preds = (probs > 0.5).float()
             
             # Calculate metrics for this batch
             total_tp += ((preds == 1) & (masks == 1)).sum().item()
@@ -60,7 +69,7 @@ def evaluate_model():
     f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
     iou = total_tp / (total_tp + total_fp + total_fn) if (total_tp + total_fp + total_fn) > 0 else 0
 
-    print("\n--- Evaluation Metrics ---")
+    print("\n--- FireViTNet Evaluation Metrics ---")
     print(f"Intersection over Union (IoU): {iou:.4f}")
     print(f"F1-Score: {f1_score:.4f}")
     print(f"Precision: {precision:.4f}")
@@ -79,32 +88,5 @@ def visualize_predictions(model, dataset, device, num_samples=15):
         with torch.no_grad():
             image_tensor = image.unsqueeze(0).to(device)
             output = model(image_tensor)
-            pred_mask = (output > 0.5).squeeze(0).cpu().numpy()
-
-        # Prepare images for display
-        image_display = image.permute(1, 2, 0).numpy() # Convert from (C, H, W) to (H, W, C)
-        true_mask_display = mask.squeeze(0).numpy()
-        
-        # Display Original Image
-        plt.subplot(num_samples, 3, 3*i + 1)
-        plt.imshow(image_display)
-        plt.title("Original Image")
-        plt.axis('off')
-        
-        # Display Ground Truth Mask
-        plt.subplot(num_samples, 3, 3*i + 2)
-        plt.imshow(true_mask_display, cmap='gray')
-        plt.title("Ground Truth Mask")
-        plt.axis('off')
-        
-        # Display Predicted Mask
-        plt.subplot(num_samples, 3, 3*i + 3)
-        plt.imshow(pred_mask.squeeze(), cmap='gray')
-        plt.title("Predicted Mask")
-        plt.axis('off')
-        
-    plt.tight_layout()
-    plt.show()
-
-if __name__ == '__main__':
-    evaluate_model()
+            
+            # --- THIS IS THE
