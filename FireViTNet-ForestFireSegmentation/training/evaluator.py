@@ -9,14 +9,14 @@ import cv2
 # --- 1. Import your custom classes ---
 import sys
 # --- IMPORTANT: UPDATE THIS PATH ---
-sys.path.append('/content/FireViTNet-ForestFireSegmentation/FireViTNet-ForestFireSegmentation') 
+sys.path.append('/content/drive/MyDrive/path/to/your/FireViTNet-ForestFireSegmentation') 
 from models.firevitnet import FireViTNet
 from utils.dataset import FireDataset
 
 # --- 2. Configuration ---
 DATA_DIR = "/content/Processed_Dataset"
 # --- IMPORTANT: UPDATE THIS PATH ---
-MODEL_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels"
+MODEL_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels/best_firevitnet_model.pth"
 BATCH_SIZE = 4 
 INPUT_SIZE = (224, 224)
 
@@ -89,4 +89,41 @@ def visualize_predictions(model, dataset, device, num_samples=15):
             image_tensor = image.unsqueeze(0).to(device)
             output = model(image_tensor)
             
-            # --- THIS IS THE
+            # --- THIS IS THE FIX ---
+            # Apply sigmoid before thresholding
+            probs = torch.sigmoid(output)
+            pred_mask = (probs > 0.5).squeeze(0).cpu().numpy()
+
+        # Prepare images for display
+        # De-normalize the image for correct display
+        image_display = image.permute(1, 2, 0).numpy()
+        mean = np.array([0.485, 0.456, 0.406])
+        std = np.array([0.229, 0.224, 0.225])
+        image_display = std * image_display + mean
+        image_display = np.clip(image_display, 0, 1)
+        
+        true_mask_display = mask.squeeze(0).numpy()
+        
+        # Display Original Image
+        plt.subplot(num_samples, 3, 3*i + 1)
+        plt.imshow(image_display)
+        plt.title("Original Image")
+        plt.axis('off')
+        
+        # Display Ground Truth Mask
+        plt.subplot(num_samples, 3, 3*i + 2)
+        plt.imshow(true_mask_display, cmap='gray')
+        plt.title("Ground Truth Mask")
+        plt.axis('off')
+        
+        # Display Predicted Mask
+        plt.subplot(num_samples, 3, 3*i + 3)
+        plt.imshow(pred_mask.squeeze(), cmap='gray')
+        plt.title("Predicted Mask")
+        plt.axis('off')
+        
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == '__main__':
+    evaluate_model()
