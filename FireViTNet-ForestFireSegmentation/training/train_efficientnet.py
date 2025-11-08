@@ -6,9 +6,8 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader, random_split
 import numpy as np
 import os
-import timm # We use timm to get EfficientNet
-# Add this import near the top
-import segmentation_models_pytorch as smp
+import segmentation_models_pytorch as smp # Import smp
+
 # This is crucial for importing your custom dataset from the utils folder
 import sys
 # --- IMPORTANT: UPDATE THIS PATH ---
@@ -22,11 +21,11 @@ DATA_DIR = "/content/Processed_Dataset"
 # This is where your new EfficientNet model will be saved
 MODEL_SAVE_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels"
 LEARNING_RATE = 1e-4
-BATCH_SIZE = 8
+BATCH_SIZE = 8 # EfficientNet is lighter, can use a larger batch size
 NUM_EPOCHS = 100 
 INPUT_SIZE = (224, 224)
 
-# --- Dice Loss Definition ---
+# --- 1. Dice Loss Implementation ---
 class DiceLoss(nn.Module):
     def __init__(self, smooth=1.0):
         super(DiceLoss, self).__init__()
@@ -37,19 +36,37 @@ class DiceLoss(nn.Module):
         probs = probs.view(-1)
         targets = targets.view(-1)
         intersection = (probs * targets).sum()
-        dice_score = (2. * intersection + self.smooth) / (probs.sum() + targets.sum() + self.smooth)
-        return 1 - dice_score
+        dice = (2. * intersection + self.smooth) / (probs.sum() + targets.sum() + self.smooth)
+        return 1 - dice
+
+# --- 2. Combined Loss (BCE + Dice) ---
+class CombinedLoss(nn.Module):
+    def __init__(self, smooth=1.0, bce_weight=0.5):
+        super(CombinedLoss, self).__init__()
+        self.dice_loss = DiceLoss(smooth=smooth)
+        self.bce_loss = nn.BCEWithLogitsLoss() # Stable BCE loss
+        self.bce_weight = bce_weight
+
+    def forward(self, logits, targets):
+        bce = self.bce_loss(logits, targets)
+        dice = self.dice_loss(logits, targets)
+        return (self.bce_weight * bce) + ((1 - self.bce_weight) * dice)
 
 # --- Main Training Function ---
 def train_model():
+    # Install smp if not already done
+    os.system("pip install segmentation-models-pytorch -q")
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
     # --- Load Dataset ---
     full_dataset = FireDataset(data_dir=DATA_DIR, input_size=INPUT_SIZE, augment=True)
+    # Split: 80% train, 10% val, 10% test
     train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+    val_size = int(0.1 * len(full_dataset))
+    test_size = len(full_dataset) - train_size - val_size
+    train_dataset, val_dataset, _ = random_split(full_dataset, [train_size, val_size, test_size])
     
     train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
@@ -57,21 +74,19 @@ def train_model():
     print(f"Training set size: {len(train_dataset)}")
     print(f"Validation set size: {len(val_dataset)}")
     
-    # --- Load EfficientNet Model ---
-    # This is the key change: we load 'efficientnet_b4'
-    # num_classes=1 for binary segmentation (fire/no-fire)
-    # Inside train_model(), replace the timm line with this:
+    # --- Load EfficientNet-Unet Model ---
     model = smp.Unet(
-        encoder_name="efficientnet-b4",  # Use EfficientNet-B4 as the backbone
-        encoder_weights="imagenet",       # Load pretrained weights
-        in_channels=3,                    # Input is RGB image
-        classes=1,                        # Output is 1 channel (fire/no-fire mask)
+        encoder_name="efficientnet-b4", 
+        encoder_weights="imagenet",       # Use pre-trained weights
+        in_channels=3, 
+        classes=1
     ).to(device)
     
     print("Unet with EfficientNet-B4 backbone loaded successfully.")
 
     # --- Setup Loss and Optimizer ---
-    loss_fn = DiceLoss()
+    # USE THE COMBINED LOSS
+    loss_fn = CombinedLoss().to(device)
     optimizer = Adam(model.parameters(), lr=LEARNING_RATE)
     
     best_val_loss = float('inf')
