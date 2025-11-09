@@ -23,10 +23,15 @@ EFFICIENTNET_PATH = "/content/drive/MyDrive/ForestFire-TrainedModels/best_effici
 BATCH_SIZE = 8
 INPUT_SIZE = (224, 224)
 
-# --- 3. Fusion Weights ---
+# --- 3. Optimal Thresholds (from our tests) ---
+VIT_THRESH = 0.30  # The best threshold for FireViTNet
+EFF_THRESH = 0.50  # The best threshold for EfficientNet (default)
+
+# --- 4. Fusion Weights ---
 # We give more weight to EfficientNet since it scored higher
 W_VIT = 0.3  # 30% weight for FireViTNet
 W_EFF = 0.7  # 70% weight for EfficientNet
+FUSED_THRESH = 0.5 # Threshold for the combined prediction
 
 def calculate_metrics(preds, masks):
     """Helper function to calculate metrics for a batch."""
@@ -50,15 +55,12 @@ def print_final_scores(model_name, metrics_dict):
     print(f"  Recall: {recall:.4f}")
 
 def run_fusion_evaluation():
-    # Install smp if needed
     os.system("pip install segmentation-models-pytorch -q")
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
     # --- Load Test Dataset ---
     full_dataset = FireDataset(data_dir=DATA_DIR, input_size=INPUT_SIZE, augment=False)
-    # Re-create the same 80/10/10 split
     train_size = int(0.8 * len(full_dataset))
     val_size = int(0.1 * len(full_dataset))
     test_size = len(full_dataset) - train_size - val_size
@@ -66,13 +68,12 @@ def run_fusion_evaluation():
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
     print(f"Test set size: {len(test_dataset)}")
 
-    # --- Load Model 1: FireViTNet ---
+    # --- Load Models ---
     firevit_model = FireViTNet(num_classes=1).to(device)
     firevit_model.load_state_dict(torch.load(FIREVITNET_PATH, map_location=device))
     firevit_model.eval()
     print("FireViTNet model loaded.")
 
-    # --- Load Model 2: EfficientNet-Unet ---
     efficientnet_model = smp.Unet(
         encoder_name="efficientnet-b4", encoder_weights=None, in_channels=3, classes=1
     ).to(device)
@@ -80,14 +81,12 @@ def run_fusion_evaluation():
     efficientnet_model.eval()
     print("EfficientNet-Unet model loaded.")
 
-    # --- Initialize Metric Counters ---
     metrics = {
         'firevit': {'tp': 0, 'fp': 0, 'fn': 0},
         'efficientnet': {'tp': 0, 'fp': 0, 'fn': 0},
         'fused_ensemble': {'tp': 0, 'fp': 0, 'fn': 0}
     }
 
-    # --- Run Evaluation Loop ---
     with torch.no_grad():
         for images, masks in test_loader:
             images = images.to(device)
@@ -96,7 +95,8 @@ def run_fusion_evaluation():
             # 1. FireViTNet Prediction
             firevit_logits = firevit_model(images)
             firevit_probs = torch.sigmoid(firevit_logits)
-            firevit_preds = (firevit_probs > 0.5).float() # Threshold at 0.5 for its individual score
+            # --- USE OPTIMAL THRESHOLD ---
+            firevit_preds = (firevit_probs > VIT_THRESH).float() 
             tp, fp, fn = calculate_metrics(firevit_preds, masks)
             metrics['firevit']['tp'] += tp
             metrics['firevit']['fp'] += fp
@@ -105,7 +105,8 @@ def run_fusion_evaluation():
             # 2. EfficientNet Prediction
             efficientnet_logits = efficientnet_model(images)
             efficientnet_probs = torch.sigmoid(efficientnet_logits)
-            efficientnet_preds = (efficientnet_probs > 0.5).float() # Threshold at 0.5 for its individual score
+            # --- USE OPTIMAL THRESHOLD ---
+            efficientnet_preds = (efficientnet_probs > EFF_THRESH).float() 
             tp, fp, fn = calculate_metrics(efficientnet_preds, masks)
             metrics['efficientnet']['tp'] += tp
             metrics['efficientnet']['fp'] += fp
@@ -113,7 +114,7 @@ def run_fusion_evaluation():
 
             # 3. Fused Prediction
             fused_probs = (W_VIT * firevit_probs) + (W_EFF * efficientnet_probs)
-            fused_preds = (fused_probs > 0.5).float() # Use the standard 0.5 threshold for the combined score
+            fused_preds = (fused_probs > FUSED_THRESH).float() 
             tp, fp, fn = calculate_metrics(fused_preds, masks)
             metrics['fused_ensemble']['tp'] += tp
             metrics['fused_ensemble']['fp'] += fp
